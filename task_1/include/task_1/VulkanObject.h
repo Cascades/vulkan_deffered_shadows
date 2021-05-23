@@ -166,13 +166,8 @@ private:
     float z_light_rotation = 0;
     float scale = 1.0f;
 
-    void prepareOffscreenFramebuffer();
-
-    void createForwardPass();
     void createImguiPass();
     void createGeometryPass();
-
-    void createAttachment(VkFormat format, VkImageUsageFlagBits usage, FrameBufferAttachment* attachment);
 	
     VkFormat findDepthFormat();
 
