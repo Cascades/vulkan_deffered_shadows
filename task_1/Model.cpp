@@ -77,23 +77,39 @@ void Model::loadModel(std::filesystem::path const & model_path) {
             indices.push_back(uniqueVertices[vertex]);
         }
 
-        Ns = materials[shape.mesh.material_ids[0]].shininess;
-        Ni = 1.0f;
-        d = materials[shape.mesh.material_ids[0]].dissolve;
-        Tr = 1.0f - d;
-        Tf = glm::vec3(1.0f, 1.0f, 1.0f);
-        illum = materials[shape.mesh.material_ids[0]].illum;
-        Ka = glm::vec3(materials[shape.mesh.material_ids[0]].ambient[0],
-            materials[shape.mesh.material_ids[0]].ambient[1],
-            materials[shape.mesh.material_ids[0]].ambient[2]);
-        Kd = glm::vec3(materials[shape.mesh.material_ids[0]].diffuse[0],
-            materials[shape.mesh.material_ids[0]].diffuse[1],
-            materials[shape.mesh.material_ids[0]].diffuse[2]);
-        Ks = glm::vec3(materials[shape.mesh.material_ids[0]].specular[0],
-            materials[shape.mesh.material_ids[0]].specular[1],
-            materials[shape.mesh.material_ids[0]].specular[2]);
-        Ke = glm::vec3(materials[shape.mesh.material_ids[0]].emission[0],
-            materials[shape.mesh.material_ids[0]].emission[1],
-            materials[shape.mesh.material_ids[0]].emission[2]);
+        if (!materials.empty())
+        {
+            Ns = materials[shape.mesh.material_ids[0]].shininess;
+            Ni = 1.0f;
+            d = materials[shape.mesh.material_ids[0]].dissolve;
+            Tr = 1.0f - d;
+            Tf = glm::vec3(1.0f, 1.0f, 1.0f);
+            illum = materials[shape.mesh.material_ids[0]].illum;
+            Ka = glm::vec3(materials[shape.mesh.material_ids[0]].ambient[0],
+                materials[shape.mesh.material_ids[0]].ambient[1],
+                materials[shape.mesh.material_ids[0]].ambient[2]);
+            Kd = glm::vec3(materials[shape.mesh.material_ids[0]].diffuse[0],
+                materials[shape.mesh.material_ids[0]].diffuse[1],
+                materials[shape.mesh.material_ids[0]].diffuse[2]);
+            Ks = glm::vec3(materials[shape.mesh.material_ids[0]].specular[0],
+                materials[shape.mesh.material_ids[0]].specular[1],
+                materials[shape.mesh.material_ids[0]].specular[2]);
+            Ke = glm::vec3(materials[shape.mesh.material_ids[0]].emission[0],
+                materials[shape.mesh.material_ids[0]].emission[1],
+                materials[shape.mesh.material_ids[0]].emission[2]);
+        }
+        else
+        {
+            Ns = 0.0;
+            Ni = 1.0f;
+            d = 0.0;
+            Tr = 1.0f - d;
+            Tf = glm::vec3(1.0f, 1.0f, 1.0f);
+            illum = 0.0;
+            Ka = glm::vec3(0.2, 0.2, 0.2);
+            Kd = glm::vec3(0.7, 0.7, 0.7);
+            Ks = glm::vec3(0.2, 0.2, 0.2);
+            Ke = glm::vec3(0.0, 0.0, 0.0);
+        }
     }
 }

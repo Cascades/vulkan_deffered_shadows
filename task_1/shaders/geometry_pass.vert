@@ -35,43 +35,9 @@ void main() {
 
     outNormal = inNormal;
 
-    specularity = 0.0;
+    specularity = ubo.specular;
 
-    if(ubo.model_stage_on > 0)
-    {
-        if(ubo.lighting_stage_on > 0)
-        {
-            vec3 vert_pos = (ubo.model * vec4(inPosition, 1.0)).xyz;
-            vec3 normal_dir = normalize((mat3(ubo.model) * inNormal).xyz);
-            vec3 light_pos = (ubo.light * vec4(-5.0, 0.0, 0.0, 1.0)).xyz;
-            vec3 light_dir = normalize(vert_pos - light_pos);
-
-            float ambient = ubo.ambient;
-            float diffuse = ubo.diffuse * max(0.0, dot(normal_dir, -light_dir));
-            
-            float specular = 0.0;
-            if(diffuse != 0.0)
-            {
-                vec3 camera_dir = normalize(vert_pos - vec3(-2.0, 0.0, 0.0));
-                vec3 reflection_dir = normalize(reflect(light_dir, normal_dir));
-
-                float spec_val = pow(max(dot(reflection_dir, -camera_dir), 0.0), ubo.Ns);
-                specular = clamp(ubo.specular * spec_val, 0.0, 1.0);
-            }
-
-            specularity = specular;
-
-            fragColor = clamp(ubo.Ke.xyz + inColor * (ambient * ubo.Ka.xyz + diffuse * ubo.Kd.xyz + specular * ubo.Ks.xyz), vec3(0.0), vec3(1.0));
-         }
-         else
-         {
-            fragColor = vec3(0.7, 0.7, 0.7);
-         }
-    }
-    else
-    {
-        fragColor = vec3(0.0,0.0,0.0);
-    }
+    fragColor = vec3(ubo.diffuse,ubo.diffuse,ubo.diffuse);
 
     fragTexCoord = inTexCoord;
     texture_on = int(ubo.texture_stage_on);

@@ -79,8 +79,6 @@ private:
         FrameBufferAttachment depth;
         VkRenderPass renderPass;
     } offScreenPass;
-
-    VkSampler offScreenSampler;
 	
     // vector of image views (to access our images)
     std::vector<VkImageView> swapChainImageViews;
@@ -165,6 +163,7 @@ private:
     float y_light_rotation = 0;
     float z_light_rotation = 0;
     float scale = 1.0f;
+    int display_mode = 0;
 
     void createImguiPass();
     void createGeometryPass();

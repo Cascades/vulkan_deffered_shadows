@@ -9,6 +9,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtx/euler_angles.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
@@ -119,7 +120,7 @@ void VulkanObject::initVulkan(GLFWwindow* window) {
 
     imgui_clear_value = { 0.6, 0.4, 0.0, 1.0 };
 
-    MODEL_PATH = "../assets/dragon_and_plane/dragon_and_plane.obj";
+    MODEL_PATH = "../assets/dragon_cow_and_plane/dragon_cow_and_plane.obj";
     TEXTURE_PATH = "../assets/duck/texture.jpg";
 
     // function to create an instance of the vulkan library
@@ -261,7 +262,7 @@ VkFormat VulkanObject::findSupportedFormat(const std::vector<VkFormat>& candidat
 
 void VulkanObject::createDepthResources() {
     VkFormat depthFormat = findDepthFormat();
-    createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+    createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
     depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
     transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -318,7 +319,7 @@ VkImageView VulkanObject::createImageView(VkImage image, VkFormat format, VkImag
 
 void VulkanObject::loadModel()
 {
-    dragon_model.loadModel("../assets/dragon_and_plane/dragon_and_plane.obj");
+    dragon_model.loadModel("../assets/dragon_cow_and_plane/dragon_cow_and_plane.obj");
 }
 
 void VulkanObject::createTextureImageView() {
@@ -408,11 +409,15 @@ void VulkanObject::createDescriptorPool() {
         throw std::runtime_error("failed to create descriptor pool!");
     }
 
-    std::array<VkDescriptorPoolSize, 2> lightingPoolSizes{};
-    lightingPoolSizes[0].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    std::array<VkDescriptorPoolSize, 4> lightingPoolSizes{};
+    lightingPoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     lightingPoolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
     lightingPoolSizes[1].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     lightingPoolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+    lightingPoolSizes[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    lightingPoolSizes[2].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+    lightingPoolSizes[3].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    lightingPoolSizes[3].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
     VkDescriptorPoolCreateInfo lightingPoolInfo{};
     lightingPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -461,19 +466,32 @@ void VulkanObject::createDescriptorSetLayout() {
         throw std::runtime_error("failed to create descriptor set layout!");
     }
 
+    VkDescriptorSetLayoutBinding lightingUboLayoutBinding{};
+    lightingUboLayoutBinding.binding = 0;
+    lightingUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    lightingUboLayoutBinding.descriptorCount = 1;
+    lightingUboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    lightingUboLayoutBinding.pImmutableSamplers = nullptr;
+	
     VkDescriptorSetLayoutBinding colorInputLayoutBinding0{};
-    colorInputLayoutBinding0.binding = 0;
+    colorInputLayoutBinding0.binding = 1;
     colorInputLayoutBinding0.descriptorCount = 1;
     colorInputLayoutBinding0.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     colorInputLayoutBinding0.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutBinding colorInputLayoutBinding1{};
-    colorInputLayoutBinding1.binding = 1;
+    colorInputLayoutBinding1.binding = 2;
     colorInputLayoutBinding1.descriptorCount = 1;
     colorInputLayoutBinding1.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     colorInputLayoutBinding1.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 2> lightingBindings = { colorInputLayoutBinding0, colorInputLayoutBinding1 };
+    VkDescriptorSetLayoutBinding depthInputLayoutBinding1{};
+    depthInputLayoutBinding1.binding = 4;
+    depthInputLayoutBinding1.descriptorCount = 1;
+    depthInputLayoutBinding1.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    depthInputLayoutBinding1.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 4> lightingBindings = { lightingUboLayoutBinding, colorInputLayoutBinding0, colorInputLayoutBinding1, depthInputLayoutBinding1 };
     VkDescriptorSetLayoutCreateInfo lightingLayoutInfo{};
     lightingLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     lightingLayoutInfo.bindingCount = static_cast<uint32_t>(lightingBindings.size());
@@ -739,7 +757,7 @@ void VulkanObject::cleanupSwapChain() {
     // destroy our swapchain
     vkDestroySwapchainKHR(device, swapChain, nullptr);
 
-    for (size_t i = 0; i < swapChainImages.size(); i++) {
+    for (size_t i = 0; i < uniformBuffers.size(); i++) {
         vkDestroyBuffer(device, uniformBuffers[i], nullptr);
         vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
     }
@@ -754,6 +772,32 @@ void VulkanObject::cleanup() {
 
     // cleanup swap chain
     cleanupSwapChain();
+
+    vkDestroyImageView(device, offScreenPass.position.view, nullptr);
+    vkDestroyImage(device, offScreenPass.position.image, nullptr);
+    vkFreeMemory(device, offScreenPass.position.mem, nullptr);
+
+    vkDestroyImageView(device, offScreenPass.albedo.view, nullptr);
+    vkDestroyImage(device, offScreenPass.albedo.image, nullptr);
+    vkFreeMemory(device, offScreenPass.albedo.mem, nullptr);
+
+    vkDestroyImageView(device, offScreenPass.normal.view, nullptr);
+    vkDestroyImage(device, offScreenPass.normal.image, nullptr);
+    vkFreeMemory(device, offScreenPass.normal.mem, nullptr);
+
+    vkDestroyImageView(device, offScreenPass.depth.view, nullptr);
+    vkDestroyImage(device, offScreenPass.depth.image, nullptr);
+    vkFreeMemory(device, offScreenPass.depth.mem, nullptr);
+
+    vkDestroyFramebuffer(device, geometryFrameBuffer, nullptr);
+
+    vkDestroyDescriptorSetLayout(device, lightingSetLayout, nullptr);
+    vkDestroyRenderPass(device, geometryPass, nullptr);
+    vkDestroyPipelineLayout(device, lightingLayout, nullptr);
+    vkDestroyPipeline(device, lightingPipeline, nullptr);
+
+    vkDestroyDescriptorPool(device, lightingDescriptorPool, nullptr);
+
 
     vkDestroySampler(device, textureSampler, nullptr);
     vkDestroyImageView(device, textureImageView, nullptr);
@@ -1017,6 +1061,12 @@ void VulkanObject::createLogicalDevice() {
         throw std::runtime_error("failed to create logical device!");
     }
 
+    VkPhysicalDeviceProperties output_props{};
+	
+    vkGetPhysicalDeviceProperties(physicalDevice, &output_props);
+
+    std::cout << output_props.apiVersion << std::endl;
+
     // finally, get the graphics queue handle and assign it to graphicsQueue
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
     // and get the presentation queue handle and assign it to presentQueue
@@ -1181,17 +1231,17 @@ void VulkanObject::createGeometryPass()
 	// color 1
     createImage(swapChainExtent.width,
         swapChainExtent.height,
-        swapChainImageFormat,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         offScreenPass.albedo.image,
         offScreenPass.albedo.mem);
 
-    imageViews[0] = createImageView(offScreenPass.albedo.image, swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+    imageViews[0] = createImageView(offScreenPass.albedo.image, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
     offScreenPass.albedo.view = imageViews[0];
 
-    attachmentDescriptions[0].format = swapChainImageFormat;
+    attachmentDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
     attachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
     attachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1206,17 +1256,17 @@ void VulkanObject::createGeometryPass()
     // color 2
     createImage(swapChainExtent.width,
         swapChainExtent.height,
-        swapChainImageFormat,
+        VK_FORMAT_A2R10G10B10_UNORM_PACK32,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         offScreenPass.normal.image,
         offScreenPass.normal.mem);
 
-    imageViews[1] = createImageView(offScreenPass.normal.image, swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+    imageViews[1] = createImageView(offScreenPass.normal.image, VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT);
     offScreenPass.normal.view = imageViews[1];
 
-    attachmentDescriptions[1].format = swapChainImageFormat;
+    attachmentDescriptions[1].format = VK_FORMAT_A2R10G10B10_UNORM_PACK32;
     attachmentDescriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
     attachmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachmentDescriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1243,7 +1293,7 @@ void VulkanObject::createGeometryPass()
         swapChainExtent.height,
         findDepthFormat(),
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         offScreenPass.depth.image,
         offScreenPass.depth.mem);
@@ -1276,11 +1326,13 @@ void VulkanObject::createGeometryPass()
     subpassDescriptions[0].preserveAttachmentCount = 0;
     subpassDescriptions[0].pResolveAttachments = nullptr;
 
-    std::array<VkAttachmentReference, 2> deferredIntputAttachmentRefs{};
+    std::array<VkAttachmentReference, 3> deferredIntputAttachmentRefs{};
     deferredIntputAttachmentRefs[0].attachment = 0;
     deferredIntputAttachmentRefs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     deferredIntputAttachmentRefs[1].attachment = 1;
     deferredIntputAttachmentRefs[1].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    deferredIntputAttachmentRefs[2].attachment = 3;
+    deferredIntputAttachmentRefs[2].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkAttachmentReference outputAttachmentRef{};
     outputAttachmentRef.attachment = 2;
@@ -1315,9 +1367,9 @@ void VulkanObject::createGeometryPass()
     dependencies[1].srcSubpass = 0;
     // this is our subpass
     dependencies[1].dstSubpass = 1;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
     dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
@@ -1458,6 +1510,11 @@ void VulkanObject::createDescriptorSets() {
         normalDescriptorInfo.imageView = offScreenPass.normal.view;
         normalDescriptorInfo.sampler = VK_NULL_HANDLE;
 
+        VkDescriptorImageInfo depthDescriptorInfo{};
+        depthDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        depthDescriptorInfo.imageView = offScreenPass.depth.view;
+        depthDescriptorInfo.sampler = VK_NULL_HANDLE;
+
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1478,21 +1535,36 @@ void VulkanObject::createDescriptorSets() {
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 
-        std::array<VkWriteDescriptorSet, 2> lightingDescriptorWrites{};
+        std::array<VkWriteDescriptorSet, 4> lightingDescriptorWrites{};
 
         lightingDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         lightingDescriptorWrites[0].dstSet = lightingDescriptorSets[i];
-        lightingDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        lightingDescriptorWrites[0].descriptorCount = 1;
         lightingDescriptorWrites[0].dstBinding = 0;
-        lightingDescriptorWrites[0].pImageInfo = &colorDescriptorInfo;
+        lightingDescriptorWrites[0].dstArrayElement = 0;
+        lightingDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        lightingDescriptorWrites[0].descriptorCount = 1;
+        lightingDescriptorWrites[0].pBufferInfo = &bufferInfo;
 
         lightingDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         lightingDescriptorWrites[1].dstSet = lightingDescriptorSets[i];
         lightingDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
         lightingDescriptorWrites[1].descriptorCount = 1;
         lightingDescriptorWrites[1].dstBinding = 1;
-        lightingDescriptorWrites[1].pImageInfo = &normalDescriptorInfo;
+        lightingDescriptorWrites[1].pImageInfo = &colorDescriptorInfo;
+
+        lightingDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        lightingDescriptorWrites[2].dstSet = lightingDescriptorSets[i];
+        lightingDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        lightingDescriptorWrites[2].descriptorCount = 1;
+        lightingDescriptorWrites[2].dstBinding = 2;
+        lightingDescriptorWrites[2].pImageInfo = &normalDescriptorInfo;
+
+        lightingDescriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        lightingDescriptorWrites[3].dstSet = lightingDescriptorSets[i];
+        lightingDescriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        lightingDescriptorWrites[3].descriptorCount = 1;
+        lightingDescriptorWrites[3].dstBinding = 4;
+        lightingDescriptorWrites[3].pImageInfo = &depthDescriptorInfo;
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(lightingDescriptorWrites.size()), lightingDescriptorWrites.data(), 0, nullptr);
     }
@@ -1779,6 +1851,9 @@ void VulkanObject::createGraphicsPipeline() {
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &lightingPipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
+
+    vkDestroyShaderModule(device, lightingVertShaderModule, nullptr);
+    vkDestroyShaderModule(device, lightingFragShaderModule, nullptr);
 }
 
 // function to create all of our framebuffers
@@ -2027,6 +2102,11 @@ void VulkanObject::drawFrame() {
     ImGui::ColorEdit3("diffuse (Kd)", (float*)&dragon_model.Kd[0], flags);
     ImGui::ColorEdit3("specular (Ks)", (float*)&dragon_model.Ks[0], flags);
     ImGui::ColorEdit3("emission (Ke)", (float*)&dragon_model.Ke[0], flags);
+    ImGui::RadioButton("normals", &display_mode, 0);
+    ImGui::RadioButton("depth", &display_mode, 1);
+    ImGui::RadioButton("specularity", &display_mode, 2);
+    ImGui::RadioButton("albedo", &display_mode, 3);
+    ImGui::RadioButton("composed", &display_mode, 4);
    
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
@@ -2171,6 +2251,10 @@ void VulkanObject::updateUniformBuffer(uint32_t currentImage) {
     ubo.model_stage_on = model_stage_on;
     ubo.texture_stage_on = texture_stage_on;
     ubo.lighting_stage_on = lighting_stage_on;
+
+    ubo.display_mode = display_mode;
+
+    ubo.win_dim = glm::vec2(swapChainExtent.width, swapChainExtent.height);
 
     void* data;
     vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);

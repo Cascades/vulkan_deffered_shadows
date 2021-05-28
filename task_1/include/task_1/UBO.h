@@ -21,4 +21,6 @@ struct UniformBufferObject {
 	glm::float32 specular;
 	glm::float32 diffuse;
 	glm::float32 ambient;
+	glm::int32 display_mode;
+	glm::vec2 win_dim;
 };

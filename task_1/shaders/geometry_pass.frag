@@ -16,13 +16,12 @@ void main() {
     if(texture_on > 0)
     {
         outColor = vec4(fragColor * texture(texSampler, fragTexCoord).rgb, 1.0);
-        outNormal.rgb = inNormal;
-        outNormal.a = specularity;
     }
     else
     {
         outColor = vec4(fragColor, 1.0);
-        outNormal.rgb = inNormal;
-        outNormal.a = specularity;
     }
+
+    outNormal.rgb = normalize(inNormal) * 0.5 + vec3(0.5);
+    outColor.a = specularity;
 }
