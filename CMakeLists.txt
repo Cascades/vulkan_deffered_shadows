@@ -9,6 +9,7 @@ find_package(Vulkan REQUIRED)
 
 # Include sub-projects.
 add_subdirectory ("task_1")
+add_subdirectory ("task_2")
 add_subdirectory ("third_party")
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/assets/ DESTINATION assets)
