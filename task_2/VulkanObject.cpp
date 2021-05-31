@@ -410,7 +410,7 @@ void VulkanObject::createDescriptorPool() {
         throw std::runtime_error("failed to create descriptor pool!");
     }
 
-    std::array<VkDescriptorPoolSize, 5> lightingPoolSizes{};
+    std::array<VkDescriptorPoolSize, 6> lightingPoolSizes{};
     lightingPoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     lightingPoolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
     lightingPoolSizes[1].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
@@ -421,6 +421,8 @@ void VulkanObject::createDescriptorPool() {
     lightingPoolSizes[3].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
     lightingPoolSizes[4].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     lightingPoolSizes[4].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+    lightingPoolSizes[5].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    lightingPoolSizes[5].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
     VkDescriptorPoolCreateInfo lightingPoolInfo{};
     lightingPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -524,12 +526,20 @@ void VulkanObject::createDescriptorSetLayout() {
     shadowSamplerLayoutBinding.pImmutableSamplers = nullptr;
     shadowSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 5> lightingBindings = {
+    VkDescriptorSetLayoutBinding PCFshadowSamplerLayoutBinding{};
+    PCFshadowSamplerLayoutBinding.binding = 6;
+    PCFshadowSamplerLayoutBinding.descriptorCount = 1;
+    PCFshadowSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    PCFshadowSamplerLayoutBinding.pImmutableSamplers = nullptr;
+    PCFshadowSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 6> lightingBindings = {
     	lightingUboLayoutBinding,
     	colorInputLayoutBinding0,
     	colorInputLayoutBinding1,
     	depthInputLayoutBinding1,
-    	shadowSamplerLayoutBinding
+    	shadowSamplerLayoutBinding,
+        PCFshadowSamplerLayoutBinding
     };
     VkDescriptorSetLayoutCreateInfo lightingLayoutInfo{};
     lightingLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1484,6 +1494,30 @@ void VulkanObject::createShadowPass()
         throw std::runtime_error("failed to create texture sampler!");
     }
 
+    VkSamplerCreateInfo pcfSamplerInfo{};
+    pcfSamplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    pcfSamplerInfo.magFilter = VK_FILTER_LINEAR;
+    pcfSamplerInfo.minFilter = VK_FILTER_LINEAR;
+    pcfSamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    pcfSamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    pcfSamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    pcfSamplerInfo.anisotropyEnable = VK_TRUE;
+    VkPhysicalDeviceProperties pcfproperties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &pcfproperties);
+    pcfSamplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    pcfSamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    pcfSamplerInfo.unnormalizedCoordinates = VK_FALSE;
+    pcfSamplerInfo.compareEnable = VK_TRUE;
+    pcfSamplerInfo.compareOp = VK_COMPARE_OP_LESS;
+    pcfSamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    pcfSamplerInfo.mipLodBias = 0.0f;
+    pcfSamplerInfo.minLod = 0.0f;
+    pcfSamplerInfo.maxLod = 0.0f;
+
+    if (vkCreateSampler(device, &pcfSamplerInfo, nullptr, &shadowPass.pcfsampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture sampler!");
+    }
+
     attachmentDescriptions[attachmentDescriptions.size() - 1].format = findDepthFormat();
     attachmentDescriptions[attachmentDescriptions.size() - 1].samples = VK_SAMPLE_COUNT_1_BIT;
     attachmentDescriptions[attachmentDescriptions.size() - 1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -1672,6 +1706,11 @@ void VulkanObject::createDescriptorSets() {
         shadowImageInfo.imageView = shadowPass.depth.view;
         shadowImageInfo.sampler = shadowPass.sampler;
 
+        VkDescriptorImageInfo PCFShadowImageInfo{};
+        PCFShadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        PCFShadowImageInfo.imageView = shadowPass.depth.view;
+        PCFShadowImageInfo.sampler = shadowPass.pcfsampler;
+
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = textureImageView;
@@ -1712,7 +1751,7 @@ void VulkanObject::createDescriptorSets() {
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 
-        std::array<VkWriteDescriptorSet, 5> lightingDescriptorWrites{};
+        std::array<VkWriteDescriptorSet, 6> lightingDescriptorWrites{};
 
         lightingDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         lightingDescriptorWrites[0].dstSet = lightingDescriptorSets[i];
@@ -1750,6 +1789,14 @@ void VulkanObject::createDescriptorSets() {
         lightingDescriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         lightingDescriptorWrites[4].descriptorCount = 1;
         lightingDescriptorWrites[4].pImageInfo = &shadowImageInfo;
+
+        lightingDescriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        lightingDescriptorWrites[5].dstSet = lightingDescriptorSets[i];
+        lightingDescriptorWrites[5].dstBinding = 6;
+        lightingDescriptorWrites[5].dstArrayElement = 0;
+        lightingDescriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        lightingDescriptorWrites[5].descriptorCount = 1;
+        lightingDescriptorWrites[5].pImageInfo = &PCFShadowImageInfo;
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(lightingDescriptorWrites.size()), lightingDescriptorWrites.data(), 0, nullptr);
 
@@ -2450,7 +2497,8 @@ void VulkanObject::drawFrame() {
     ImGui::RadioButton("albedo", &display_mode, 3);
     ImGui::RadioButton("shadow", &display_mode, 4);
     ImGui::RadioButton("position", &display_mode, 5);
-    ImGui::RadioButton("composed", &display_mode, 6);
+    ImGui::RadioButton("composed", &display_mode, 6); ImGui::SameLine();
+    ImGui::Checkbox("PCF", &pcf);
    
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
@@ -2604,9 +2652,11 @@ void VulkanObject::updateUniformBuffer(uint32_t currentImage) {
 
     ubo.display_mode = display_mode;
 
+    ubo.pcf_on = pcf;
+
     ubo.win_dim = glm::vec2(swapChainExtent.width, swapChainExtent.height);
 
-    glm::mat4 light_view = glm::lookAt(glm::vec3(ubo.light * glm::vec4(-2.0f, 0.0f, 0.0f, 1.0f)), glm::vec3(0.0), glm::vec3(0.0, 1.0, 0.0));
+    glm::mat4 light_view = glm::lookAt(glm::vec3(ubo.light * glm::vec4(-2.5f, 0.0f, 0.0f, 1.0f)), glm::vec3(0.0), glm::vec3(0.0, 1.0, 0.0));
     glm::mat4 light_proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.001f, 4.0f);
     light_proj[1][1] *= -1;
 

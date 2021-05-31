@@ -15,16 +15,17 @@ struct UniformBufferObject {
 	glm::vec4 Kd;
 	glm::vec4 Ks;
 	glm::vec4 Ke;
+	glm::vec2 win_dim;
 	glm::float32 Ns;
 	glm::float32 model_stage_on;
 	glm::float32 texture_stage_on;
 	glm::float32 lighting_stage_on;
+	glm::float32 pcf_on;
 	glm::float32 specular;
 	glm::float32 diffuse;
 	glm::float32 ambient;
 	glm::float32 shadow_bias;
 	glm::int32 display_mode;
-	glm::vec2 win_dim;
 };
 
 struct ShadowUniformBufferObject

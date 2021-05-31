@@ -85,6 +85,7 @@ private:
         VkFramebuffer frameBuffer;
         FrameBufferAttachment depth;
         VkSampler sampler;
+        VkSampler pcfsampler;
         VkRenderPass renderPass;
     } shadowPass;
 	
@@ -184,6 +185,7 @@ private:
     float scale = 1.0f;
     int display_mode = 0;
     float shadow_bias = 0.0;
+    bool pcf = false;
 
     void createImguiPass();
     void createGeometryPass();
