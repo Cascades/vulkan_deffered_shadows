@@ -40,9 +40,9 @@ void Model::loadModel(std::filesystem::path const & model_path) {
             Vertex vertex{};
 
             vertex.pos = {
-                attrib.vertices[3 * index.vertex_index + 0] * 0.02,
-                attrib.vertices[3 * index.vertex_index + 1] * 0.02,
-                attrib.vertices[3 * index.vertex_index + 2] * 0.02
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
             };
 
             if (index.texcoord_index >= 0)

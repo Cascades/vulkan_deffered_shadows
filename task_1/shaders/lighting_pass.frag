@@ -29,10 +29,27 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outFragcolor;
 
-const mat4 vulkan_space = mat4(vec4(1.0, 0.0, 0.0, 0.0),
-                               vec4(0.0, -1.0, 0.0, 0.0),
-                               vec4(0.0, 0.0, 0.5, 0.5),
-                               vec4(0.0, 0.0, 0.0, 1.0));
+const vec4 lights[2] = { vec4(-5.0, 0.0, 0.0, 1.0), vec4(5.0, 0.0, 0.0, 1.0) };
+const vec3 light_cols[2] = { vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0) };
+
+float LinearizeDepth(float depth, float near_p, float far_p)
+{
+    float z = depth * 2.0 - 1.0; // Back to NDC 
+    return (2.0 * near_p * far_p) / (far_p + near_p - z * (far_p - near_p));
+}
+
+vec4 position_from_depth(float depth)
+{
+    float z = subpassLoad(inDepth).r;
+
+    vec4 clipSpace = vec4(inUV * 2.0 - 1.0, z, 1.0);
+	vec4 viewSpace = inverse(ubo.proj) * clipSpace;
+	viewSpace.xyz /= viewSpace.w;
+
+    vec4 position = inverse(ubo.view) * vec4( viewSpace.xyz, 1.0 );
+
+    return vec4(vec3(position), 1.0);
+}
 
 void main() 
 {
@@ -42,7 +59,8 @@ void main()
 	}
 	else if(ubo.display_mode == 1)
 	{
-		outFragcolor = vec4(subpassLoad(inDepth).r,  subpassLoad(inDepth).r,  subpassLoad(inDepth).r,  1.0);
+        float z = LinearizeDepth(subpassLoad(inDepth).r, 0.1, 10.0) / 9.9;
+		outFragcolor = vec4(z, z, z,  1.0);
 	}
 	else if(ubo.display_mode == 2)
 	{
@@ -54,14 +72,7 @@ void main()
 	}
 	else
 	{
-        float z = subpassLoad(inDepth).r;
-
-        vec2 uv = vec2(gl_FragCoord.x / ubo.win_dim.x, gl_FragCoord.y / ubo.win_dim.y);
-        vec4 clipSpace = vec4(uv * 2.0 - 1.0, z, 1.0);
-	    vec4 viewSpace = inverse(ubo.proj) * clipSpace;
-	    viewSpace.xyz /= viewSpace.w;
-
-        vec4 position = inverse(ubo.view) * viewSpace;
+        vec4 position = position_from_depth(subpassLoad(inDepth).r);;
 
         vec3 normal = (subpassLoad(inNormal).rgb - vec3(0.5)) / 0.5;
 
@@ -69,25 +80,32 @@ void main()
         {
             if(ubo.lighting_stage_on > 0)
             {
-                vec3 frag_pos = position.xyz;
-                vec3 normal_dir = normalize((mat3(ubo.model) * normal).xyz);
-                vec3 light_pos = (ubo.light * vec4(-5.0, 0.0, 0.0, 1.0)).xyz;
-                vec3 light_dir = normalize(frag_pos - light_pos);
+                vec3 light_contribution = vec3(0.0, 0.0, 0.0);
 
-                float ambient = ubo.ambient;
-                float diffuse = ubo.diffuse * max(0.0, dot(normal_dir, -light_dir));
-            
-                float specular = 0.0;
-                if(diffuse != 0.0)
+                for(int light_num = 0; light_num < 2; ++light_num)
                 {
-                    vec3 camera_dir = normalize(frag_pos - vec3(-2.0, 0.0, 0.0));
-                    vec3 reflection_dir = normalize(reflect(light_dir, normal_dir));
+                    vec3 frag_pos = position.xyz;
+                    vec3 normal_dir = normalize((mat3(ubo.model) * normal).xyz);
+                    vec3 light_pos = (ubo.light * lights[light_num]).xyz;
+                    vec3 light_dir = normalize(frag_pos - light_pos);
 
-                    float spec_val = pow(max(dot(reflection_dir, -camera_dir), 0.0), ubo.Ns);
-                    specular = clamp(subpassLoad(inColor).a * spec_val, 0.0, 1.0);
+                    float ambient = ubo.ambient;
+                    float diffuse = ubo.diffuse * max(0.0, dot(normal_dir, -light_dir));
+            
+                    float specular = 0.0;
+                    if(diffuse != 0.0)
+                    {
+                        vec3 camera_dir = normalize(frag_pos - vec3(-2.0, 0.0, 0.0));
+                        vec3 reflection_dir = normalize(reflect(light_dir, normal_dir));
+
+                        float spec_val = pow(max(dot(reflection_dir, -camera_dir), 0.0), ubo.Ns);
+                        specular = clamp(subpassLoad(inColor).a * spec_val, 0.0, 1.0);
+                    }
+
+                    light_contribution += diffuse * ubo.Kd.xyz * light_cols[light_num] + specular * ubo.Ks.xyz * light_cols[light_num];
                 }
 
-                outFragcolor = vec4(clamp(ubo.Ke.xyz + subpassLoad(inColor).rgb * (ambient * ubo.Ka.xyz + diffuse * ubo.Kd.xyz + specular * ubo.Ks.xyz), vec3(0.0), vec3(1.0)), 1.0);
+                outFragcolor = vec4(clamp(ubo.Ke.xyz + subpassLoad(inColor).rgb * (ubo.ambient + (light_contribution / 2.0)), vec3(0.0), vec3(1.0)), 1.0);
              }
              else
              {

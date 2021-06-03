@@ -2232,7 +2232,7 @@ void VulkanObject::updateUniformBuffer(uint32_t currentImage) {
 
     ubo.model = translation_matrix * rotation_matrix * scale_matrix;
     ubo.view = glm::lookAt(glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f * (1 / zoom)), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
     ubo.proj[1][1] *= -1;
 
     ubo.light = glm::rotate(x_light_rotation, glm::vec3(1.0, 0.0, 0.0));

@@ -11,15 +11,17 @@ layout(std140, binding = 0) uniform UniformBufferObject {
 	vec4 Kd;
 	vec4 Ks;
 	vec4 Ke;
+    vec2 win_dim;
     float Ns;
 	float model_stage_on;
 	float texture_stage_on;
 	float lighting_stage_on;
+    float pcf_on;
     float specular;
 	float diffuse;
 	float ambient;
+    float shadow_bias;
 	int display_mode;
-    vec2 win_dim;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
